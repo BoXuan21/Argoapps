@@ -68,6 +68,9 @@ resource "google_compute_instance" "kind_vm" {
     apt-get install -y docker.io
     systemctl start docker
     systemctl enable docker
+
+    # install salt-master
+    apt install salt-master
     
     # install Google Cloud Operations Agent
     curl -sSO https://dl.google.com/cloudagents/add-google-cloud-ops-agent-repo.sh
@@ -83,7 +86,6 @@ resource "google_compute_instance" "kind_vm" {
     mv ./kind /usr/local/bin/kind
     
     # Wait for Docker to be ready and create KIND cluster as ubuntu user
-    sleep 30
     su - ubuntu -c "kind create cluster --name test-cluster"
     su - ubuntu -c "kubectl cluster-info --context kind-test-cluster"
   EOT
