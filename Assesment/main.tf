@@ -7,7 +7,7 @@ variable "project_id" {
 variable "region" {
   description = "Google Cloud Region"
   type        = string
-  default     = "europe-central2 "
+  default     = "europe-central2"
 }
 
 variable "zone" {
@@ -41,7 +41,8 @@ resource "google_compute_instance" "kind_vm" {
   }
 
   network_interface {
-    network = "default"
+    network    = google_compute_network.kind_vpc.id
+    subnetwork = google_compute_subnetwork.kind_subnet.id
 
     access_config {
       // Ephemeral IP / can be accessed through the internet
@@ -69,9 +70,11 @@ resource "google_compute_instance" "kind_vm" {
     systemctl start docker
     systemctl enable docker
 
-    # install salt-master
-    apt install salt-master
-    
+    # install ansible
+    apt-get install -y software-properties-common
+    add-apt-repository --yes --update ppa:ansible/ansible
+    apt-get install -y ansible
+
     # install Google Cloud Operations Agent
     curl -sSO https://dl.google.com/cloudagents/add-google-cloud-ops-agent-repo.sh
     bash add-google-cloud-ops-agent-repo.sh --also-install
@@ -92,8 +95,11 @@ resource "google_compute_instance" "kind_vm" {
 
   service_account {
     email  = google_service_account.kind_test_sa.email
-    scopes = ["cloud-platform"]
+    scopes = [
+      "https://www.googleapis.com/auth/logging.write",
+      "https://www.googleapis.com/auth/monitoring.write"
+    ]
   }
 
-  tags = ["kind", "kubernetes"]
+  tags = ["kind", "kubernetes", "kind-ssh-access"]
 }
