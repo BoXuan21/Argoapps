@@ -11,7 +11,7 @@ spec:
   source:
     repoURL: https://github.com/BoXuan21/Argoapps.git
     targetRevision: HEAD
-    path: argo-apps/apps
+    path: argo-apps/argo-apps/apps
   syncPolicy:
     automated:
       prune: true
