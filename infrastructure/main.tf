@@ -91,19 +91,17 @@ resource "google_compute_instance" "kind_vm" {
     # Wait for Docker to be ready
     sleep 30
     
-    # Reset KIND cluster (delete if exists, then create fresh)
+     # Reset KIND cluster (delete if exists, then create fresh)
     su - ubuntu -c "kind delete cluster --name test-cluster || true"
     su - ubuntu -c "kind create cluster --name test-cluster"
-    
+
     # Install ArgoCD
     su - ubuntu -c "kubectl create namespace argocd"
     su - ubuntu -c "kubectl apply -n argocd -f https://raw.githubusercontent.com/argoproj/argo-cd/stable/manifests/install.yaml"
     
     # Wait for ArgoCD to be ready
     su - ubuntu -c "kubectl wait --for=condition=available --timeout=300s deployment/argocd-server -n argocd"
-    
-    
-    # Get ArgoCD initial password and save it to a file for easy access
+
     su - ubuntu -c "kubectl -n argocd get secret argocd-initial-admin-secret -o jsonpath='{.data.password}' | base64 -d > /home/ubuntu/argocd-password.txt"
     chown ubuntu:ubuntu /home/ubuntu/argocd-password.txt
   
