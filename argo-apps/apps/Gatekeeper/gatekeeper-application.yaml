@@ -4,14 +4,45 @@ metadata:
   name: gatekeeper
   namespace: argocd
 spec:
-  project: gatekeeper
+  project: default
   source:
-    repoURL: https://github.com/open-policy-agent/gatekeeper.git
+    repoURL: https://open-policy-agent.github.io/gatekeeper/charts
     chart: gatekeeper
-    targetRevision: HEAD
+    targetRevision: 3.20.0
+    helm:
+      values: |
+        replicas: 3
+        auditInterval: 60
+        metricsBackends: ["prometheus"]
+        logLevel: INFO
+        
+        image:
+          repository: openpolicyagent/gatekeeper
+          release: v3.20.0
+          pullPolicy: IfNotPresent
+        
+        controllerManager:
+          resources:
+            limits:
+              memory: 512Mi
+            requests:
+              cpu: 100m
+              memory: 256Mi
+              
+        audit:
+          resources:
+            limits:
+              memory: 512Mi
+            requests:
+              cpu: 100m
+              memory: 256Mi
   destination:
     server: https://kubernetes.default.svc
+    namespace: gatekeeper-system
   syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
     syncOptions:
       - CreateNamespace=true
       - Prune=true
