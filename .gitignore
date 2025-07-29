@@ -4,3 +4,5 @@ terraform.tfstate*
 *.tfplan
 *.tfvars
 !*.tfvars.example
+
+.DS_Store
