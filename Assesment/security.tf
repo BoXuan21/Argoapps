@@ -1,7 +1,3 @@
-# =============================================================================
-# SIMPLIFIED SECURITY CONFIGURATION (Works with Limited Permissions)
-# =============================================================================
-
 # Custom VPC for better security and isolation
 resource "google_compute_network" "kind_vpc" {
   name                    = "kind-vpc"
@@ -21,9 +17,16 @@ resource "google_compute_subnetwork" "kind_subnet" {
   private_ip_google_access = true
 }
 
-# =============================================================================
-# ESSENTIAL FIREWALL RULES (Works with Limited Permissions)
-# =============================================================================
+#Iam templates
+/*
+resource "google_project_iam_custom_role" "my-custom-role" {
+  role_id     = "myCustomRole"
+  title       = "My Custom Role"
+  description = "A description"
+  permissions = ["iam.roles.list", "iam.roles.create", "iam.roles.delete"]
+} */
+
+#Essential Firewall Rules
 
 # Essential: Allow SSH access
 resource "google_compute_firewall" "allow_ssh" {
@@ -35,7 +38,7 @@ resource "google_compute_firewall" "allow_ssh" {
     ports    = ["22"]
   }
   
-  source_ranges = ["0.0.0.0/0"]  # left it open for now
+  source_ranges = ["0.0.0.0/0"]  # no need for restrictions
   target_tags   = ["kind-ssh-access"]
   description   = "Allow SSH access to KIND VMs"
 }
@@ -55,25 +58,8 @@ resource "google_compute_firewall" "allow_kubernetes" {
   description   = "Allow Kubernetes cluster communication"
 }
 
-# =============================================================================
-# CUSTOM IAM CONFIGURATION TEMPLATES
-# =============================================================================
 
-
-/*
-resource "google_organization_iam_custom_role" "my-custom-role" {
-  role_id     = "Custom_kind_role"
-  org_id      = "115"
-  title       = "Custom Role for KIND VM"
-  description = "Custom Role for KIND VM"
-  permissions = ["iam.roles.list", "iam.roles.create", "iam.roles.delete"]
-}
-*/
-
-
-# =============================================================================
-# OUTPUTS
-# =============================================================================
+#Output
 
 output "security_info" {
   description = "Security configuration summary"
@@ -84,6 +70,6 @@ output "security_info" {
       google_compute_firewall.allow_ssh.name,
       google_compute_firewall.allow_kubernetes.name
     ]
-    note = "IAM templates available - uncomment when you have proper permissions"
+    note = "Simplified for KIND cluster. ArgoCD accessible via port forwarding. IAM templates available - uncomment when having proper permissions"
   }
 } 

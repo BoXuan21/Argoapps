@@ -7,13 +7,13 @@ variable "project_id" {
 variable "region" {
   description = "Google Cloud Region"
   type        = string
-  default     = "europe-central2"
+  default     = "europe-west4"
 }
 
 variable "zone" {
   description = "Google Cloud Zone"
   type        = string
-  default     = "europe-central2-a"
+  default     = "europe-west4-a"
 }
 
 provider "google" {
@@ -30,9 +30,9 @@ resource "google_service_account" "kind_test_sa" {
 
 resource "google_compute_instance" "kind_vm" {
   name         = "kind-vm"
-  machine_type = "e2-medium" # weils schneller ist
+  machine_type = "e2-medium"
   zone         = var.zone
-
+  
   boot_disk {
     initialize_params {
       image = "ubuntu-os-cloud/ubuntu-2204-lts"
@@ -45,13 +45,11 @@ resource "google_compute_instance" "kind_vm" {
     subnetwork = google_compute_subnetwork.kind_subnet.id
 
     access_config {
-      // Ephemeral IP / can be accessed through the internet
     }
   }
 
   metadata_startup_script = <<-EOT
-    #!/bin/bash
-    # Update system
+   # installing essential packages
     apt-get update
 
     # install git
@@ -70,14 +68,16 @@ resource "google_compute_instance" "kind_vm" {
     systemctl start docker
     systemctl enable docker
 
+    # Fix Docker permission issues
+    chmod 666 /var/run/docker.sock
+
     # install ansible
     apt-get install -y software-properties-common
     add-apt-repository --yes --update ppa:ansible/ansible
     apt-get install -y ansible
 
-    # install Google Cloud Operations Agent
-    curl -sSO https://dl.google.com/cloudagents/add-google-cloud-ops-agent-repo.sh
-    bash add-google-cloud-ops-agent-repo.sh --also-install
+    # install salt-ssh
+    apt-get install -y salt-ssh
 
     # Install kubectl
     curl -LO "https://dl.k8s.io/release/$(curl -L -s https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl"
@@ -88,17 +88,34 @@ resource "google_compute_instance" "kind_vm" {
     chmod +x ./kind
     mv ./kind /usr/local/bin/kind
     
-    # Wait for Docker to be ready and create KIND cluster as ubuntu user
+    # Wait for Docker to be ready
+    sleep 30
+    
+    # Reset KIND cluster (delete if exists, then create fresh)
+    su - ubuntu -c "kind delete cluster --name test-cluster || true"
     su - ubuntu -c "kind create cluster --name test-cluster"
-    su - ubuntu -c "kubectl cluster-info --context kind-test-cluster"
+    
+    # Install ArgoCD
+    su - ubuntu -c "kubectl create namespace argocd"
+    su - ubuntu -c "kubectl apply -n argocd -f https://raw.githubusercontent.com/argoproj/argo-cd/stable/manifests/install.yaml"
+    
+    # Wait for ArgoCD to be ready
+    su - ubuntu -c "kubectl wait --for=condition=available --timeout=300s deployment/argocd-server -n argocd"
+    
+    
+    # Get ArgoCD initial password and save it to a file for easy access
+    su - ubuntu -c "kubectl -n argocd get secret argocd-initial-admin-secret -o jsonpath='{.data.password}' | base64 -d > /home/ubuntu/argocd-password.txt"
+    chown ubuntu:ubuntu /home/ubuntu/argocd-password.txt
+  
+    echo "Setup complete! ArgoCD password saved to /home/ubuntu/argocd-password.txt"
+    echo "To access ArgoCD UI, SSH to the VM and run:"
+    echo "kubectl port-forward svc/argocd-server -n argocd 8080:443"
+    echo "Then access https://localhost:8080 with username: admin"
   EOT
 
   service_account {
     email  = google_service_account.kind_test_sa.email
-    scopes = [
-      "https://www.googleapis.com/auth/logging.write",
-      "https://www.googleapis.com/auth/monitoring.write"
-    ]
+    scopes = ["cloud-platform"]
   }
 
   tags = ["kind", "kubernetes", "kind-ssh-access"]
