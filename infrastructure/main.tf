@@ -78,12 +78,6 @@ resource "google_compute_instance" "kind_vm" {
 
     # install salt-ssh
     apt-get install -y salt-ssh
-
-      # Create shared directories
-    mkdir -p /opt/kind
-    mkdir -p /shared/kubeconfig
-    mkdir -p /shared/kind-data
-    chmod 755 /opt/kind /shared /shared/kubeconfig /shared/kind-data
     
     # Install kubectl
     curl -LO "https://dl.k8s.io/release/$(curl -L -s https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl"
@@ -104,6 +98,13 @@ resource "google_compute_instance" "kind_vm" {
     # Install ArgoCD
     su - bo -c "kubectl create namespace argocd"
     su - bo -c "kubectl apply -n argocd -f https://raw.githubusercontent.com/argoproj/argo-cd/stable/manifests/install.yaml"
+    
+    # Wait for ArgoCD to be ready
+    sleep 60
+    su - bo -c "kubectl wait --for=condition=available --timeout=300s deployment/argocd-server -n argocd"
+    
+    # Start port-forward for external access to ArgoCD
+    nohup su - bo -c "kubectl port-forward svc/argocd-server -n argocd 8080:443 --address 0.0.0.0" > /var/log/argocd-portforward.log 2>&1 &
     
   EOT
 
