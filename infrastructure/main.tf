@@ -48,65 +48,7 @@ resource "google_compute_instance" "kind_vm" {
     }
   }
 
-  metadata_startup_script = <<-EOT
-   # installing essential packages
-    apt-get update
-
-    # install git
-    apt-get install -y git curl wget
-
-    # install helm
-    curl https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | bash
-
-    # install argoCD CLI
-    curl -sSL -o argocd-linux-amd64 https://github.com/argoproj/argo-cd/releases/latest/download/argocd-linux-amd64
-    install -m 555 argocd-linux-amd64 /usr/local/bin/argocd
-    rm argocd-linux-amd64
-
-    # Install Docker
-    apt-get install -y docker.io
-    systemctl start docker
-    systemctl enable docker
-
-    # Fix Docker permission issues
-    chmod 666 /var/run/docker.sock
-
-    # install ansible
-    apt-get install -y software-properties-common
-    add-apt-repository --yes --update ppa:ansible/ansible
-    apt-get install -y ansible
-
-    # install salt-ssh
-    apt-get install -y salt-ssh
-    
-    # Install kubectl
-    curl -LO "https://dl.k8s.io/release/$(curl -L -s https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl"
-    install -o root -g root -m 0755 kubectl /usr/local/bin/kubectl
-    
-    # Install KIND
-    [ $(uname -m) = x86_64 ] && curl -Lo ./kind https://kind.sigs.k8s.io/dl/v0.20.0/kind-linux-amd64
-    chmod +x ./kind
-    mv ./kind /usr/local/bin/kind
-
-    # Wait for Docker to be ready
-    sleep 30
-    
-     # Reset KIND cluster (delete if exists, then create fresh)
-    su - bo -c "kind delete cluster --name test-cluster || true"
-    su - bo -c "kind create cluster --name test-cluster"
-
-    # Install ArgoCD
-    su - bo -c "kubectl create namespace argocd"
-    su - bo -c "kubectl apply -n argocd -f https://raw.githubusercontent.com/argoproj/argo-cd/stable/manifests/install.yaml"
-    
-    # Wait for ArgoCD to be ready
-    sleep 60
-    su - bo -c "kubectl wait --for=condition=available --timeout=300s deployment/argocd-server -n argocd"
-    
-    # Start port-forward for external access to ArgoCD
-    nohup su - bo -c "kubectl port-forward svc/argocd-server -n argocd 8080:443 --address 0.0.0.0" > /var/log/argocd-portforward.log 2>&1 &
-    
-  EOT
+  metadata_startup_script = file("${path.module}/startup-script.sh")
 
   service_account {
     email  = google_service_account.kind_test_sa.email
