@@ -79,6 +79,12 @@ resource "google_compute_instance" "kind_vm" {
     # install salt-ssh
     apt-get install -y salt-ssh
 
+      # Create shared directories
+    mkdir -p /opt/kind
+    mkdir -p /shared/kubeconfig
+    mkdir -p /shared/kind-data
+    chmod 755 /opt/kind /shared /shared/kubeconfig /shared/kind-data
+    
     # Install kubectl
     curl -LO "https://dl.k8s.io/release/$(curl -L -s https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl"
     install -o root -g root -m 0755 kubectl /usr/local/bin/kubectl
@@ -87,33 +93,29 @@ resource "google_compute_instance" "kind_vm" {
     [ $(uname -m) = x86_64 ] && curl -Lo ./kind https://kind.sigs.k8s.io/dl/v0.20.0/kind-linux-amd64
     chmod +x ./kind
     mv ./kind /usr/local/bin/kind
-    
+
     # Wait for Docker to be ready
     sleep 30
     
      # Reset KIND cluster (delete if exists, then create fresh)
-    su - ubuntu -c "kind delete cluster --name test-cluster || true"
-    su - ubuntu -c "kind create cluster --name test-cluster"
+    su - bo -c "kind delete cluster --name test-cluster || true"
+    su - bo -c "kind create cluster --name test-cluster"
 
     # Install ArgoCD
-    su - ubuntu -c "kubectl create namespace argocd"
-    su - ubuntu -c "kubectl apply -n argocd -f https://raw.githubusercontent.com/argoproj/argo-cd/stable/manifests/install.yaml"
+    su - bo -c "kubectl create namespace argocd"
+    su - bo -c "kubectl apply -n argocd -f https://raw.githubusercontent.com/argoproj/argo-cd/stable/manifests/install.yaml"
     
-    # Wait for ArgoCD to be ready
-    su - ubuntu -c "kubectl wait --for=condition=available --timeout=300s deployment/argocd-server -n argocd"
-
-    su - ubuntu -c "kubectl -n argocd get secret argocd-initial-admin-secret -o jsonpath='{.data.password}' | base64 -d > /home/ubuntu/argocd-password.txt"
-    chown ubuntu:ubuntu /home/ubuntu/argocd-password.txt
-  
-    echo "Setup complete! ArgoCD password saved to /home/ubuntu/argocd-password.txt"
-    echo "To access ArgoCD UI, SSH to the VM and run:"
-    echo "kubectl port-forward svc/argocd-server -n argocd 8080:443"
-    echo "Then access https://localhost:8080 with username: admin"
   EOT
 
   service_account {
     email  = google_service_account.kind_test_sa.email
     scopes = ["cloud-platform"]
+  }
+
+  # Make VM preemptible for cost saving
+  scheduling {
+    preemptible = true
+    automatic_restart = false
   }
 
   tags = ["kind", "kubernetes", "kind-ssh-access"]
