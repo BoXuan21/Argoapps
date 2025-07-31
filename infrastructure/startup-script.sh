@@ -113,11 +113,3 @@ if ! su - bo -c "kubectl get namespace argocd &> /dev/null"; then
 else
   echo "ArgoCD already installed"
 fi
-
-# Check if port-forward is already running, start if not
-if ! pgrep -f "kubectl port-forward.*argocd-server" &> /dev/null; then
-  echo "Starting ArgoCD port-forward..."
-  nohup su - bo -c "kubectl port-forward svc/argocd-server -n argocd 8080:443 --address 0.0.0.0" > /var/log/argocd-portforward.log 2>&1 &
-else
-  echo "ArgoCD port-forward already running"
-fi 
