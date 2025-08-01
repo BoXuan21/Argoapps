@@ -9,9 +9,9 @@ spec:
     server: https://kubernetes.default.svc
   project: default
   source:
-    repoURL: https://github.com/BoXuan21/Argoapps.git
+    repoURL: https://github.com/BoXuan21/bo-kube-vm.git
     targetRevision: HEAD
-    path: apps
+    path: argo-apps/apps
   syncPolicy:
     automated:
       prune: true
