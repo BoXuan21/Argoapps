@@ -8,7 +8,7 @@ metadata:
 spec:
   project: default
   source:
-    repoURL: https://github.com/BoXuan21/bo-kube-vm.git
+    repoURL: https://github.com/BoXuan21/Argoapps.git
     targetRevision: HEAD
     path: application/spring-boot-todo-app/k8s
   destination:
