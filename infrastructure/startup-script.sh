@@ -113,3 +113,32 @@ if ! su - bo -c "kubectl get namespace argocd &> /dev/null"; then
 else
   echo "ArgoCD already installed"
 fi
+
+# Deploy root ArgoCD application (only if not already deployed)
+if ! su - bo -c "kubectl get application argo-apps -n argocd &> /dev/null"; then
+  echo "Deploying ArgoCD root application..."
+  # Wait a bit more for ArgoCD to be fully ready
+  sleep 30
+  su - bo -c 'kubectl apply -f - <<EOF
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: argo-apps
+  namespace: argocd
+spec:
+  destination:
+    namespace: argocd
+    server: https://kubernetes.default.svc
+  project: default
+  source:
+    repoURL: https://github.com/BoXuan21/Argoapps.git
+    targetRevision: HEAD
+    path: argo-apps/apps
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+EOF'
+else
+  echo "ArgoCD root application already deployed"
+fi
