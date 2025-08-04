@@ -17,7 +17,7 @@ spec:
     spec:
       containers:
       - name: todo-app
-        image: gcr.io/rd-sre-assessment-center/todo-app:latest
+        image: nginx:latest
         ports:
         - containerPort: 8282
           name: http
