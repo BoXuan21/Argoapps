@@ -1,0 +1,74 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: todo-app
+  namespace: todo-app
+  labels:
+    app: todo-app
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: todo-app
+  template:
+    metadata:
+      labels:
+        app: todo-app
+    spec:
+      containers:
+      - name: todo-app
+        image: gcr.io/rd-sre-assessment-center/todo-app:latest
+        ports:
+        - containerPort: 8282
+          name: http
+        env:
+        - name: SPRING_CONFIG_LOCATION
+          value: "classpath:/application.properties,file:/config/application.properties"
+        volumeMounts:
+        - name: config-volume
+          mountPath: /config
+          readOnly: true
+        livenessProbe:
+          httpGet:
+            path: /actuator/health
+            port: 8282
+          initialDelaySeconds: 60
+          periodSeconds: 30
+          timeoutSeconds: 5
+          failureThreshold: 3
+        readinessProbe:
+          httpGet:
+            path: /actuator/health
+            port: 8282
+          initialDelaySeconds: 30
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 3
+        resources:
+          requests:
+            memory: "256Mi"
+            cpu: "250m"
+          limits:
+            memory: "512Mi"
+            cpu: "500m"
+      volumes:
+      - name: config-volume
+        configMap:
+          name: todo-app-config
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: todo-app-service
+  namespace: todo-app
+  labels:
+    app: todo-app
+spec:
+  selector:
+    app: todo-app
+  ports:
+  - name: http
+    port: 80
+    targetPort: 8282
+    protocol: TCP
+  type: LoadBalancer 

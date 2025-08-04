@@ -10,7 +10,7 @@ spec:
   source:
     repoURL: https://github.com/BoXuan21/bo-kube-vm.git
     targetRevision: HEAD
-    path: spring-boot-todo-app/k8s
+    path: application/spring-boot-todo-app/k8s
   destination:
     server: https://kubernetes.default.svc
     namespace: todo-app
