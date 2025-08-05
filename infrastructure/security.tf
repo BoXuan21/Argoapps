@@ -57,6 +57,36 @@ resource "google_compute_firewall" "allow_kubernetes" {
   description   = "Allow Kubernetes cluster communication"
 }
 
+# Allow all HTTP/HTTPS traffic for nip.io access
+resource "google_compute_firewall" "allow_http_https" {
+  name    = "kind-allow-http-https"
+  network = google_compute_network.kind_vpc.name
+
+  allow {
+    protocol = "tcp"
+    ports    = ["80", "443"]
+  }
+
+  source_ranges = ["0.0.0.0/0"]
+  target_tags   = ["kind", "kubernetes"]
+  description   = "Allow HTTP/HTTPS traffic for nip.io access"
+}
+
+# Allow all NodePort range for ingress controllers
+resource "google_compute_firewall" "allow_nodeports" {
+  name    = "kind-allow-nodeports"
+  network = google_compute_network.kind_vpc.name
+
+  allow {
+    protocol = "tcp"
+    ports    = ["30000-32767"]
+  }
+
+  source_ranges = ["0.0.0.0/0"]
+  target_tags   = ["kind", "kubernetes"]
+  description   = "Allow NodePort range for ingress controllers"
+}
+
 
 #Output
 
@@ -67,8 +97,10 @@ output "security_info" {
     subnet_cidr = google_compute_subnetwork.kind_subnet.ip_cidr_range
     firewall_rules = [
       google_compute_firewall.allow_ssh.name,
-      google_compute_firewall.allow_kubernetes.name
+      google_compute_firewall.allow_kubernetes.name,
+      google_compute_firewall.allow_http_https.name,
+      google_compute_firewall.allow_nodeports.name
     ]
-    note = "Simplified for KIND cluster. ArgoCD accessible via port forwarding. IAM templates available - uncomment when having proper permissions"
+    note = "ArgoCD accessible via nip.io at https://argocd.[EXTERNAL_IP].nip.io. All necessary ports (80, 443, 30000-32767) are open"
   }
 } 
