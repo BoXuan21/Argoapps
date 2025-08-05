@@ -17,13 +17,20 @@ spec:
     spec:
       containers:
       - name: todo-app
-        image: nginx:latest
+        image: todo-app:latest
+        imagePullPolicy: Never
         ports:
         - containerPort: 8282
           name: http
         env:
         - name: SPRING_CONFIG_LOCATION
           value: "classpath:/application.properties,file:/config/application.properties"
+        - name: SERVER_PORT
+          value: "8282"
+        - name: MANAGEMENT_ENDPOINTS_WEB_EXPOSURE_INCLUDE
+          value: "health,info"
+        - name: MANAGEMENT_ENDPOINT_HEALTH_SHOW-DETAILS
+          value: "always"
         volumeMounts:
         - name: config-volume
           mountPath: /config
@@ -32,24 +39,24 @@ spec:
           httpGet:
             path: /actuator/health
             port: 8282
-          initialDelaySeconds: 60
+          initialDelaySeconds: 120
           periodSeconds: 30
-          timeoutSeconds: 5
-          failureThreshold: 3
+          timeoutSeconds: 10
+          failureThreshold: 5
         readinessProbe:
           httpGet:
             path: /actuator/health
             port: 8282
-          initialDelaySeconds: 30
-          periodSeconds: 10
-          timeoutSeconds: 5
+          initialDelaySeconds: 60
+          periodSeconds: 15
+          timeoutSeconds: 10
           failureThreshold: 3
         resources:
           requests:
-            memory: "256Mi"
+            memory: "512Mi"
             cpu: "250m"
           limits:
-            memory: "512Mi"
+            memory: "1Gi"
             cpu: "500m"
       volumes:
       - name: config-volume
