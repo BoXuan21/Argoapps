@@ -144,19 +144,82 @@ else
 fi
 
 
-# Configure ArgoCD for insecure mode (required for ingress)
-echo "Configuring ArgoCD for insecure mode..."
+# Configure ArgoCD for insecure mode (required for ingress) - EARLY
+echo "Configuring ArgoCD for insecure mode (early configuration)..."
 su - bo -c "kubectl create configmap argocd-cmd-params-cm -n argocd --from-literal=server.insecure=true --dry-run=client -o yaml | kubectl apply -f -"
 
-# Configure ArgoCD ingress with nip.io
-if ! su - bo -c "kubectl get ingress argocd-ingress -n argocd &> /dev/null"; then
-  echo "Configuring ArgoCD ingress with nip.io..."
+# Configure NGINX Ingress Controller for NodePort access with correct ports FIRST
+echo "Configuring NGINX Ingress Controller for NodePort access..."
+su - bo -c "kubectl patch svc ingress-nginx-controller -n ingress-nginx -p '{\"spec\":{\"type\":\"NodePort\",\"ports\":[{\"name\":\"http\",\"port\":80,\"targetPort\":80,\"nodePort\":30080},{\"name\":\"https\",\"port\":443,\"targetPort\":443,\"nodePort\":30443}]}}'"
+echo "NGINX Ingress Controller configured for host port access"
+
+# Wait for NGINX service to be updated
+echo "Waiting for NGINX service to be updated..."
+sleep 10
+
+# Function to wait for deployment to be ready
+wait_for_deployment() {
+  local namespace=$1
+  local deployment=$2
+  local timeout=${3:-300}
   
-  # Get the external IP address dynamically
-  EXTERNAL_IP=$(curl -s http://metadata.google.internal/computeMetadata/v1/instance/network-interfaces/0/access-configs/0/external-ip -H "Metadata-Flavor: Google")
+  su - bo -c "kubectl wait --for=condition=available --timeout=${timeout}s deployment/$deployment -n $namespace" || {
+    return 1
+  }
+  return 0
+}
+
+# Function to retry command with backoff
+retry_command() {
+  local max_attempts=$1
+  shift
+  local cmd="$@"
+  local attempt=1
   
-  # Create ingress configuration with correct settings
-  su - bo -c "kubectl apply -f - <<EOF
+  while [ $attempt -le $max_attempts ]; do
+    if eval "$cmd"; then
+      return 0
+    else
+      if [ $attempt -lt $max_attempts ]; then
+        local wait_time=$((attempt * 10))
+        sleep $wait_time
+      fi
+      attempt=$((attempt + 1))
+    fi
+  done
+  
+  return 1
+}
+
+# Get the external IP address dynamically
+EXTERNAL_IP=$(curl -s http://metadata.google.internal/computeMetadata/v1/instance/network-interfaces/0/access-configs/0/external-ip -H "Metadata-Flavor: Google")
+
+# Ensure we have the external IP
+if [ -z "\${EXTERNAL_IP}" ]; then
+  exit 1
+fi
+
+# Wait extra time for ArgoCD to be fully ready
+wait_for_deployment argocd argocd-server 300
+
+# Ensure ArgoCD server is configured for insecure mode BEFORE creating ingress
+retry_command 3 'su - bo -c "kubectl create configmap argocd-cmd-params-cm -n argocd --from-literal=server.insecure=true --dry-run=client -o yaml | kubectl apply -f -"'
+
+# Restart ArgoCD server to apply insecure mode FIRST
+su - bo -c "kubectl rollout restart deployment argocd-server -n argocd"
+wait_for_deployment argocd argocd-server 300
+
+# Wait additional time for server to fully initialize with new config
+sleep 30
+
+# Delete existing ingress if it exists
+su - bo -c "kubectl delete ingress argocd-ingress -n argocd --ignore-not-found=true"
+
+# Wait a moment for cleanup
+sleep 5
+
+# Create ingress configuration with retry logic
+retry_command 3 'su - bo -c "kubectl apply -f - <<EOF
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
@@ -166,11 +229,16 @@ metadata:
     nginx.ingress.kubernetes.io/backend-protocol: \"HTTP\"
     nginx.ingress.kubernetes.io/ssl-redirect: \"false\"
     nginx.ingress.kubernetes.io/force-ssl-redirect: \"false\"
-    nginx.ingress.kubernetes.io/rewrite-target: /
+    nginx.ingress.kubernetes.io/server-snippet: |
+      grpc_read_timeout 300;
+      grpc_send_timeout 300;
+      client_body_timeout 60;
+      client_header_timeout 60;
+      client_max_body_size 1m;
 spec:
   ingressClassName: nginx
   rules:
-  - host: argocd.\${EXTERNAL_IP}.nip.io
+  - host: argocd.'\${EXTERNAL_IP}'.nip.io
     http:
       paths:
       - path: /
@@ -180,26 +248,53 @@ spec:
             name: argocd-server
             port:
               number: 80
-EOF"
-  
-  # Configure NGINX Ingress Controller for NodePort access with correct ports
-  echo "Configuring NGINX Ingress Controller for NodePort access..."
-  su - bo -c "kubectl patch svc ingress-nginx-controller -n ingress-nginx -p '{\"spec\":{\"type\":\"NodePort\",\"ports\":[{\"name\":\"http\",\"port\":80,\"targetPort\":80,\"nodePort\":30080},{\"name\":\"https\",\"port\":443,\"targetPort\":443,\"nodePort\":30443}]}}'"
+EOF"'
 
-  echo "NGINX Ingress Controller configured for host port access"
+# Verify ingress was created with retry
+retry_command 5 'su - bo -c "kubectl get ingress argocd-ingress -n argocd &> /dev/null"'
+
+# Patch ArgoCD server service to ensure correct port mapping
+retry_command 3 'su - bo -c "kubectl patch svc argocd-server -n argocd -p '\''{\"spec\":{\"type\":\"ClusterIP\",\"ports\":[{\"name\":\"server\",\"port\":80,\"protocol\":\"TCP\",\"targetPort\":8080}]}}'\'"'
+
+# ArgoCD server was already restarted above, so just wait for it to stabilize
+sleep 15
+
+# Wait for ingress to be ready
+sleep 30
+
+# Test connectivity with more robust checking
+ARGOCD_URL="http://argocd.\${EXTERNAL_IP}.nip.io"
+CONNECTIVITY_SUCCESS=false
+
+for i in {1..10}; do
+  # Test HTTP response code
+  HTTP_CODE=\$(curl -s -o /dev/null -w "%{http_code}" "\$ARGOCD_URL" 2>/dev/null || echo "000")
   
-  # Restart ArgoCD server to apply insecure mode
-  echo "Restarting ArgoCD server to apply configuration..."
-  su - bo -c "kubectl rollout restart deployment argocd-server -n argocd"
-  su - bo -c "kubectl rollout status deployment argocd-server -n argocd --timeout=300s"
+  if [ "\$HTTP_CODE" = "200" ]; then
+    # Also verify we get ArgoCD content
+    if curl -s "\$ARGOCD_URL" | grep -q "Argo CD"; then
+      CONNECTIVITY_SUCCESS=true
+      break
+    fi
+  elif [ "\$HTTP_CODE" = "307" ] || [ "\$HTTP_CODE" = "301" ] || [ "\$HTTP_CODE" = "302" ]; then
+    # If we get a redirect, try to fix it by restarting argocd server once more
+    if [ \$i -eq 3 ]; then
+      su - bo -c "kubectl rollout restart deployment argocd-server -n argocd"
+      wait_for_deployment argocd argocd-server 180
+      sleep 20
+    fi
+  fi
   
-else
-  echo "ArgoCD ingress already configured"
-fi
+  if [ \$i -lt 10 ]; then
+    sleep 15
+  fi
+done
+
+# Get ArgoCD admin password
+ARGOCD_PASSWORD=\$(su - bo -c "kubectl -n argocd get secret argocd-initial-admin-secret -o jsonpath='{.data.password}' | base64 -d" 2>/dev/null || echo "Password not available yet")
 
 # Deploy root ArgoCD application (only if not already deployed)
 if ! su - bo -c "kubectl get application argo-apps -n argocd &> /dev/null"; then
-  echo "Deploying ArgoCD root application..."
   # Wait a bit more for ArgoCD to be fully ready
   sleep 30
   su - bo -c 'kubectl apply -f - <<EOF
@@ -222,6 +317,4 @@ spec:
       prune: true
       selfHeal: true
 EOF'
-else
-  echo "ArgoCD root application already deployed"
 fi
