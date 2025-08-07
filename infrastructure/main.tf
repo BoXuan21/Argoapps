@@ -22,6 +22,13 @@ provider "google" {
   zone    = var.zone
 }
 
+# Static IP address for the KIND VM
+resource "google_compute_address" "kind_static_ip" {
+  name   = "kind-vm-static-ip"
+  region = var.region
+  description = "Static IP address for KIND VM"
+}
+
 resource "google_service_account" "kind_test_sa" {
   account_id   = "kind-test-sa"
   display_name = "KIND Test Service Account"
@@ -45,6 +52,7 @@ resource "google_compute_instance" "kind_vm" {
     subnetwork = google_compute_subnetwork.kind_subnet.id
 
     access_config {
+      nat_ip = google_compute_address.kind_static_ip.address
     }
   }
 
@@ -62,4 +70,15 @@ resource "google_compute_instance" "kind_vm" {
   }
 
   tags = ["kind", "kubernetes", "kind-ssh-access"]
+}
+
+# Output the static IP address for easy access
+output "kind_vm_static_ip" {
+  description = "Static IP address of the KIND VM"
+  value       = google_compute_address.kind_static_ip.address
+}
+
+output "kind_vm_external_ip" {
+  description = "External IP address of the KIND VM"
+  value       = google_compute_instance.kind_vm.network_interface[0].access_config[0].nat_ip
 }
