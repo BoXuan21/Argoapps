@@ -91,7 +91,7 @@ while ! docker info &> /dev/null; do
   sleep 5
 done
 
-# Create KIND configuration with host port mapping
+# Create KIND configuration with NodePort mapping
 echo "Creating KIND configuration..."
 su - bo -c 'cat > /home/bo/kind-config.yaml <<EOF
 kind: Cluster
@@ -99,17 +99,20 @@ apiVersion: kind.x-k8s.io/v1alpha4
 nodes:
 - role: control-plane
   extraPortMappings:
-  - containerPort: 443
+  - containerPort: 30080
+    hostPort: 80
+    protocol: TCP
+  - containerPort: 30443
     hostPort: 443
     protocol: TCP
-  - containerPort: 80
-    hostPort: 80
+  - containerPort: 30008
+    hostPort: 8080
     protocol: TCP
 EOF'
 
 # Check if KIND cluster exists, create if not
 if ! su - bo -c "kind get clusters | grep -q test-cluster"; then
-  echo "Creating KIND cluster with host port mapping..."
+  echo "Creating KIND cluster with NodePort host port mapping..."
   su - bo -c "kind create cluster --name test-cluster --config /home/bo/kind-config.yaml"
 else
   echo "KIND cluster already exists"
@@ -127,7 +130,6 @@ else
   echo "NGINX Ingress Controller already installed"
 fi
 
-
 # Check if ArgoCD namespace exists, create and install if not
 if ! su - bo -c "kubectl get namespace argocd &> /dev/null"; then
   echo "Installing ArgoCD..."
@@ -141,15 +143,19 @@ else
   echo "ArgoCD already installed"
 fi
 
-# Get external IP for nip.io configuration
-EXTERNAL_IP=$(curl -s http://metadata.google.internal/computeMetadata/v1/instance/network-interfaces/0/access-configs/0/external-ip -H "Metadata-Flavor: Google")
-echo "External IP: $EXTERNAL_IP"
+
+# Configure ArgoCD for insecure mode (required for ingress)
+echo "Configuring ArgoCD for insecure mode..."
+su - bo -c "kubectl create configmap argocd-cmd-params-cm -n argocd --from-literal=server.insecure=true --dry-run=client -o yaml | kubectl apply -f -"
 
 # Configure ArgoCD ingress with nip.io
 if ! su - bo -c "kubectl get ingress argocd-ingress -n argocd &> /dev/null"; then
   echo "Configuring ArgoCD ingress with nip.io..."
   
-  # Create ingress configuration
+  # Get the external IP address dynamically
+  EXTERNAL_IP=$(curl -s http://metadata.google.internal/computeMetadata/v1/instance/network-interfaces/0/access-configs/0/external-ip -H "Metadata-Flavor: Google")
+  
+  # Create ingress configuration with correct settings
   su - bo -c "kubectl apply -f - <<EOF
 apiVersion: networking.k8s.io/v1
 kind: Ingress
@@ -157,13 +163,14 @@ metadata:
   name: argocd-ingress
   namespace: argocd
   annotations:
-    nginx.ingress.kubernetes.io/ssl-passthrough: \"true\"
-    nginx.ingress.kubernetes.io/backend-protocol: \"HTTPS\"
+    nginx.ingress.kubernetes.io/backend-protocol: \"HTTP\"
+    nginx.ingress.kubernetes.io/ssl-redirect: \"false\"
+    nginx.ingress.kubernetes.io/force-ssl-redirect: \"false\"
     nginx.ingress.kubernetes.io/rewrite-target: /
 spec:
   ingressClassName: nginx
   rules:
-  - host: argocd.$EXTERNAL_IP.nip.io
+  - host: argocd.\${EXTERNAL_IP}.nip.io
     http:
       paths:
       - path: /
@@ -172,25 +179,23 @@ spec:
           service:
             name: argocd-server
             port:
-              number: 443
+              number: 80
 EOF"
   
-  # Configure NGINX Ingress Controller for NodePort access
-echo "Configuring NGINX Ingress Controller for NodePort access..."
-su - bo -c "kubectl patch svc ingress-nginx-controller -n ingress-nginx -p '{\"spec\":{\"type\":\"NodePort\"}}'"
+  # Configure NGINX Ingress Controller for NodePort access with correct ports
+  echo "Configuring NGINX Ingress Controller for NodePort access..."
+  su - bo -c "kubectl patch svc ingress-nginx-controller -n ingress-nginx -p '{\"spec\":{\"type\":\"NodePort\",\"ports\":[{\"name\":\"http\",\"port\":80,\"targetPort\":80,\"nodePort\":30080},{\"name\":\"https\",\"port\":443,\"targetPort\":443,\"nodePort\":30443}]}}'"
 
-# Patch the service to use standard ports
-su - bo -c "kubectl patch svc ingress-nginx-controller -n ingress-nginx -p '{\"spec\":{\"ports\":[{\"name\":\"http\",\"port\":80,\"targetPort\":80,\"nodePort\":80},{\"name\":\"https\",\"port\":443,\"targetPort\":443,\"nodePort\":443}]}}'"
-
-echo "NGINX Ingress Controller configured for host port access"
+  echo "NGINX Ingress Controller configured for host port access"
   
-  echo "ArgoCD will be accessible at: https://argocd.$EXTERNAL_IP.nip.io"
-echo "Direct access via IP: https://$EXTERNAL_IP"
+  # Restart ArgoCD server to apply insecure mode
+  echo "Restarting ArgoCD server to apply configuration..."
+  su - bo -c "kubectl rollout restart deployment argocd-server -n argocd"
+  su - bo -c "kubectl rollout status deployment argocd-server -n argocd --timeout=300s"
+  
 else
   echo "ArgoCD ingress already configured"
 fi
-
-
 
 # Deploy root ArgoCD application (only if not already deployed)
 if ! su - bo -c "kubectl get application argo-apps -n argocd &> /dev/null"; then
@@ -220,4 +225,3 @@ EOF'
 else
   echo "ArgoCD root application already deployed"
 fi
-
