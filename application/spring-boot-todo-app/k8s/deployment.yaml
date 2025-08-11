@@ -1,0 +1,63 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: spring-boot-todo-app
+  namespace: spring-boot-todo
+  labels:
+    app: spring-boot-todo-app
+    version: v1
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: spring-boot-todo-app
+  template:
+    metadata:
+      labels:
+        app: spring-boot-todo-app
+        version: v1
+    spec:
+      containers:
+      - name: spring-boot-todo-app
+        image: spring-boot-todo-app:v1.0.0
+        imagePullPolicy: Never
+        ports:
+        - containerPort: 8080
+          name: http
+        env:
+        - name: SPRING_PROFILES_ACTIVE
+          value: "kubernetes"
+        - name: SERVER_PORT
+          value: "8080"
+        resources:
+          requests:
+            memory: "256Mi"
+            cpu: "250m"
+          limits:
+            memory: "512Mi"
+            cpu: "500m"
+        livenessProbe:
+          httpGet:
+            path: /actuator/health
+            port: 8080
+          initialDelaySeconds: 60
+          periodSeconds: 10
+          timeoutSeconds: 3
+          failureThreshold: 3
+        readinessProbe:
+          httpGet:
+            path: /actuator/health
+            port: 8080
+          initialDelaySeconds: 30
+          periodSeconds: 5
+          timeoutSeconds: 3
+          failureThreshold: 3
+        volumeMounts:
+        - name: app-config
+          mountPath: /app/config
+          readOnly: true
+      volumes:
+      - name: app-config
+        configMap:
+          name: spring-boot-todo-app-config
+      restartPolicy: Always
