@@ -290,8 +290,6 @@ for i in {1..10}; do
   fi
 done
 
-# Get ArgoCD admin password
-ARGOCD_PASSWORD=\$(su - bo -c "kubectl -n argocd get secret argocd-initial-admin-secret -o jsonpath='{.data.password}' | base64 -d" 2>/dev/null || echo "Password not available yet")
 
 # Deploy root ArgoCD application (only if not already deployed)
 if ! su - bo -c "kubectl get application argo-apps -n argocd &> /dev/null"; then
