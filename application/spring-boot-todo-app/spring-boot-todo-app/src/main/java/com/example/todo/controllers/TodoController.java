@@ -15,10 +15,10 @@ public class TodoController {
 	@Autowired
 	TodoRepository todoRepository;
 	
-	@GetMapping
-	public String index() {
-	return "index.html";
-}
+    @GetMapping("/")
+    public String index() {
+        return "index";
+    }
 
 @GetMapping("/todos")
 public String todos(Model model) {
