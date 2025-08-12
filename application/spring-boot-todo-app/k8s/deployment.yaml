@@ -43,8 +43,7 @@ spec:
             memory: "256Mi"
             cpu: "200m"
         startupProbe:
-          httpGet:
-            path: /actuator/health
+          tcpSocket:
             port: 8080
           initialDelaySeconds: 60
           periodSeconds: 10
