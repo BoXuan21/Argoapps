@@ -12,9 +12,10 @@ resources:
   - deployment.yaml
   - service.yaml
 
-commonLabels:
-  app: spring-boot-todo-app
-  managed-by: argocd
+labels:
+  - pairs:
+      app: spring-boot-todo-app
+      managed-by: argocd
 
 images:
   - name: spring-boot-todo-app
