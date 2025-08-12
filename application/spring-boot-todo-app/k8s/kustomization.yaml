@@ -18,4 +18,5 @@ commonLabels:
 
 images:
   - name: spring-boot-todo-app
+    newName: boxuanyang/spring-boot-todo-app
     newTag: v1.0.0
