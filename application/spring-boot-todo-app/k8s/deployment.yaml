@@ -19,7 +19,7 @@ spec:
     spec:
       containers:
       - name: spring-boot-todo-app
-        image: boxuanyang/spring-boot-todo-app:v1.0.0
+        image: boxuanyang/spring-boot-todo-app:v1.0.1
         imagePullPolicy: IfNotPresent
         ports:
         - containerPort: 8080
