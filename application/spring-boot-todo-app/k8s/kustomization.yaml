@@ -13,7 +13,8 @@ resources:
   - service.yaml
 
 labels:
-  - pairs:
+  - includeSelectors: false
+    pairs:
       app: spring-boot-todo-app
       managed-by: argocd
 
