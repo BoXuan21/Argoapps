@@ -8,4 +8,4 @@ resources:
 - argocd-metrics-service.yaml
 
 commonLabels:
-  app: monitoring-dashboards 
+  app: monitoring-dashboards
