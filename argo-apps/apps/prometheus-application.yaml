@@ -30,41 +30,47 @@ spec:
           service:
             type: ClusterIP
             servicePort: 9090
-          
+
         # Enable AlertManager
         alertmanager:
           enabled: true
-          
+          persistentVolume:
+            enabled: true
+            size: 1Gi
+          resources:
+            requests:
+              memory: 128Mi
+              cpu: 50m
+            limits:
+              memory: 256Mi
+              cpu: 200m
+
         # Enable node exporter
         nodeExporter:
           enabled: true
-          
+          resources:
+            requests:
+              memory: 64Mi
+              cpu: 50m
+            limits:
+              memory: 128Mi
+              cpu: 100m
+
         # Enable pushgateway
         pushgateway:
           enabled: true
-          
+          resources:
+            requests:
+              memory: 64Mi
+              cpu: 50m
+            limits:
+              memory: 128Mi
+              cpu: 100m
+
         # Enable kube-state-metrics
         kubeStateMetrics:
           enabled: true
-          
-        # Use default scrape configs with annotations discovery
-        extraScrapeConfigs: |
-          - job_name: 'kubernetes-pods'
-            kubernetes_sd_configs:
-              - role: pod
-            relabel_configs:
-              - source_labels: [__meta_kubernetes_pod_annotation_prometheus_io_scrape]
-                action: keep
-                regex: true
-              - source_labels: [__meta_kubernetes_pod_annotation_prometheus_io_path]
-                action: replace
-                target_label: __metrics_path__
-                regex: (.+)
-              - source_labels: [__address__, __meta_kubernetes_pod_annotation_prometheus_io_port]
-                action: replace
-                regex: ([^:]+)(?::\d+)?;(\d+)
-                replacement: $1:$2
-                target_label: __address__
+
   destination:
     server: https://kubernetes.default.svc
     namespace: monitoring
@@ -75,9 +81,10 @@ spec:
     syncOptions:
       - CreateNamespace=true
       - Prune=true
+      - Replace=true
     retry:
-      limit: 3
+      limit: 5
       backoff:
         duration: 5s
         factor: 2
-        maxDuration: 3m 
+        maxDuration: 3m
