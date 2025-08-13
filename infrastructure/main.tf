@@ -1,27 +1,3 @@
-variable "project_id" {
-  description = "Google Cloud Project ID"
-  type        = string
-  default     = "rd-sre-assessment-center"
-}
-
-variable "region" {
-  description = "Google Cloud Region"
-  type        = string
-  default     = "europe-west4"
-}
-
-variable "zone" {
-  description = "Google Cloud Zone"
-  type        = string
-  default     = "europe-west4-a"
-}
-
-provider "google" {
-  project = var.project_id
-  region  = var.region
-  zone    = var.zone
-}
-
 # Static IP address for the KIND VM
 resource "google_compute_address" "kind_static_ip" {
   name   = "kind-vm-static-ip"
@@ -37,13 +13,13 @@ resource "google_service_account" "kind_test_sa" {
 
 resource "google_compute_instance" "kind_vm" {
   name         = "kind-vm"
-  machine_type = "e2-medium"
+  machine_type = var.vm_machine_type
   zone         = var.zone
   
   boot_disk {
     initialize_params {
-      image = "ubuntu-os-cloud/ubuntu-2204-lts"
-      size  = 20
+      image = var.vm_image
+      size  = var.vm_disk_size
     }
   }
 
@@ -65,20 +41,11 @@ resource "google_compute_instance" "kind_vm" {
 
   # Make VM preemptible for cost saving
   scheduling {
-    preemptible = true
+    preemptible = var.vm_preemptible
     automatic_restart = false
   }
 
   tags = ["kind", "kubernetes", "kind-ssh-access"]
 }
 
-# Output the static IP address for easy access
-output "kind_vm_static_ip" {
-  description = "Static IP address of the KIND VM"
-  value       = google_compute_address.kind_static_ip.address
-}
 
-output "kind_vm_external_ip" {
-  description = "External IP address of the KIND VM"
-  value       = google_compute_instance.kind_vm.network_interface[0].access_config[0].nat_ip
-}

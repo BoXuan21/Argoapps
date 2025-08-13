@@ -108,7 +108,8 @@ nodes:
   - containerPort: 30008
     hostPort: 8080
     protocol: TCP
-EOF'
+EOF
+'
 
 # Check if KIND cluster exists, create if not
 if ! su - bo -c "kind get clusters | grep -q test-cluster"; then
@@ -150,7 +151,7 @@ su - bo -c "kubectl create configmap argocd-cmd-params-cm -n argocd --from-liter
 
 # Configure NGINX Ingress Controller for NodePort access with correct ports FIRST
 echo "Configuring NGINX Ingress Controller for NodePort access..."
-su - bo -c "kubectl patch svc ingress-nginx-controller -n ingress-nginx -p '{\"spec\":{\"type\":\"NodePort\",\"ports\":[{\"name\":\"http\",\"port\":80,\"targetPort\":80,\"nodePort\":30080},{\"name\":\"https\",\"port\":443,\"targetPort\":443,\"nodePort\":30443}]}}'"
+su - bo -c 'kubectl patch svc ingress-nginx-controller -n ingress-nginx -p "{\"spec\":{\"type\":\"NodePort\",\"ports\":[{\"name\":\"http\",\"port\":80,\"targetPort\":80,\"nodePort\":30080},{\"name\":\"https\",\"port\":443,\"targetPort\":443,\"nodePort\":30443}]}}"'
 echo "NGINX Ingress Controller configured for host port access"
 
 # Wait for NGINX service to be updated
@@ -195,7 +196,7 @@ retry_command() {
 EXTERNAL_IP=$(curl -s http://metadata.google.internal/computeMetadata/v1/instance/network-interfaces/0/access-configs/0/external-ip -H "Metadata-Flavor: Google")
 
 # Ensure we have the external IP
-if [ -z "\${EXTERNAL_IP}" ]; then
+if [ -z "${EXTERNAL_IP}" ]; then
   exit 1
 fi
 
@@ -238,7 +239,7 @@ metadata:
 spec:
   ingressClassName: nginx
   rules:
-  - host: argocd.'\${EXTERNAL_IP}'.nip.io
+  - host: argocd.${EXTERNAL_IP}.nip.io
     http:
       paths:
       - path: /
@@ -248,54 +249,47 @@ spec:
             name: argocd-server
             port:
               number: 80
-EOF"'
+EOF
+"'
 
 # Verify ingress was created with retry
 retry_command 5 'su - bo -c "kubectl get ingress argocd-ingress -n argocd &> /dev/null"'
 
 # Patch ArgoCD server service to ensure correct port mapping
-retry_command 3 'su - bo -c "kubectl patch svc argocd-server -n argocd -p '\''{\"spec\":{\"type\":\"ClusterIP\",\"ports\":[{\"name\":\"server\",\"port\":80,\"protocol\":\"TCP\",\"targetPort\":8080}]}}'\'"'
+retry_command 3 'su - bo -c "kubectl patch svc argocd-server -n argocd -p \"{\\\"spec\\\":{\\\"type\\\":\\\"ClusterIP\\\",\\\"ports\\\":[{\\\"name\\\":\\\"server\\\",\\\"port\\\":80,\\\"protocol\\\":\\\"TCP\\\",\\\"targetPort\\\":8080}]}}\""'
 
 # ArgoCD server was already restarted above, so just wait for it to stabilize
-sleep 15
-
-# Wait for ingress to be ready
-sleep 30
+sleep 45
 
 # Test connectivity with more robust checking
-ARGOCD_URL="http://argocd.\${EXTERNAL_IP}.nip.io"
+ARGOCD_URL="http://argocd.${EXTERNAL_IP}.nip.io"
 CONNECTIVITY_SUCCESS=false
 
 for i in {1..10}; do
   # Test HTTP response code
-  HTTP_CODE=\$(curl -s -o /dev/null -w "%{http_code}" "\$ARGOCD_URL" 2>/dev/null || echo "000")
+  HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" "$ARGOCD_URL" 2>/dev/null || echo "000")
   
-  if [ "\$HTTP_CODE" = "200" ]; then
+  if [ "$HTTP_CODE" = "200" ]; then
     # Also verify we get ArgoCD content
-    if curl -s "\$ARGOCD_URL" | grep -q "Argo CD"; then
+    if curl -s "$ARGOCD_URL" | grep -q "Argo CD"; then
       CONNECTIVITY_SUCCESS=true
       break
     fi
-  elif [ "\$HTTP_CODE" = "307" ] || [ "\$HTTP_CODE" = "301" ] || [ "\$HTTP_CODE" = "302" ]; then
-    # If we get a redirect, try to fix it by restarting argocd server once more
-    if [ \$i -eq 3 ]; then
+  elif [ "$HTTP_CODE" = "307" ] || [ "$HTTP_CODE" = "301" ] || [ "$HTTP_CODE" = "302" ]; then
+    if [ $i -eq 3 ]; then
       su - bo -c "kubectl rollout restart deployment argocd-server -n argocd"
       wait_for_deployment argocd argocd-server 180
       sleep 20
     fi
   fi
   
-  if [ \$i -lt 10 ]; then
-    sleep 15
-  fi
+  # wait a moment before retrying
+  sleep 15
 done
 
-
 # Deploy root ArgoCD application (only if not already deployed)
-if ! su - bo -c "kubectl get application argo-apps -n argocd &> /dev/null"; then
-  # Wait a bit more for ArgoCD to be fully ready
-  sleep 30
-  su - bo -c 'kubectl apply -f - <<EOF
+sleep 30
+su - bo -c 'kubectl apply -f - <<EOF
 apiVersion: argoproj.io/v1alpha1
 kind: Application
 metadata:
@@ -314,5 +308,5 @@ spec:
     automated:
       prune: true
       selfHeal: true
-EOF'
-fi
+EOF
+'
