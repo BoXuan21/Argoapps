@@ -1,0 +1,21 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: spring-boot-todo-app
+  namespace: argocd
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/BoXuan21/Argoapps.git
+    targetRevision: HEAD
+    path: application/spring-boot-todo
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: spring-boot-todo
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
+      - Prune=true

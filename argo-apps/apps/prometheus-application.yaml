@@ -1,0 +1,51 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: prometheus
+  namespace: argocd
+spec:
+  project: default
+  source:
+    repoURL: https://prometheus-community.github.io/helm-charts
+    chart: prometheus
+    targetRevision: 27.30.0
+    helm:
+      values: |
+        alertmanager:
+          enabled: true
+          service:
+            type: ClusterIP
+        server:
+          retention: 15d
+          service:
+            type: ClusterIP
+        pushgateway:
+          enabled: false
+        
+        # Alert rules configuration
+        serverFiles:
+          alerting_rules.yml:
+            groups:
+            - name: spring-boot-simple
+              rules:
+              - alert: SpringBootAppDown
+                expr: up{job="spring-boot-todo-app"} == 0
+                for: 1m
+                labels:
+                  severity: critical
+                  service: spring-boot-todo-app
+                annotations:
+                  summary: "Spring Boot Todo App is down"
+                  description: "Spring Boot Todo application has been down for more than 1 minute"
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: monitoring
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
+      - Prune=true
+
+
